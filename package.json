@@ -1,9 +1,29 @@
 {
-  "name": "oc-iterm2",
+  "name": "@pfoundation/oc2iterm",
   "version": "0.1.0",
   "description": "OpenCode CLI plugin: mirror agent status to iTerm2 3.7+ Session Status (tab subtitle + dot).",
   "type": "module",
-  "private": true,
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pfoundation/oc2Iterm.git"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "cli-plugin",
+    "iterm2",
+    "terminal",
+    "session-status"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "files": [
+    "tui.ts",
+    "src/**/*.ts"
+  ],
   "exports": {
     "./tui": "./src/tui.ts",
     "./package.json": "./package.json"

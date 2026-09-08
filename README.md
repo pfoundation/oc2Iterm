@@ -23,6 +23,23 @@ It reports the same lifecycle Claude Code's integration shows, plus failures:
 
 ## Install
 
+### Via npm
+
+```sh
+npm install @pfoundation/oc2iterm
+```
+
+Then register it in `~/.config/opencode/cli.json`:
+
+```json
+{ "plugins": ["@pfoundation/oc2iterm"] }
+```
+
+Loading is via directory discovery: OpenCode picks up the package's
+`tui.ts` entrypoint (a re-export of `src/tui.ts`).
+
+### Via symlink (local dev)
+
 ```sh
 # 1. Link the plugin into OpenCode's global plugin directory.
 ln -s ~/dev/oc-iterm2 ~/.config/opencode/plugins/oc-iterm2
