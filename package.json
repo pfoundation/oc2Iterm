@@ -1,0 +1,21 @@
+{
+  "name": "oc-iterm2",
+  "version": "0.1.0",
+  "description": "OpenCode CLI plugin: mirror agent status to iTerm2 3.7+ Session Status (tab subtitle + dot).",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./tui": "./src/tui.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "probe": "bun scripts/probe.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.2"
+  }
+}
