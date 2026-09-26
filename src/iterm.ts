@@ -1,5 +1,5 @@
 /**
- * iTerm2 3.7+ Session Status escape sequences (OSC 21337).
+ * iTerm2 Session Status (OSC 21337) and progress (OSC 9;4) escape sequences.
  *
  * https://iterm2.com/documentation-session-status.html
  *
@@ -69,6 +69,11 @@ export function buildStatusSequence(fields: ItermFields): string {
 /** Sequence that clears every status field. */
 export function buildClearSequence(): string {
   return buildStatusSequence({ status: "" });
+}
+
+/** Native progress: clear, error, indeterminate, or paused (no percentage). */
+export function buildProgressSequence(state: 0 | 2 | 3 | 4): string {
+  return `${ESC}]9;4;${state}${BEL}`;
 }
 
 /**

@@ -3,7 +3,7 @@
  *
  * Mirrors the current agent state to iTerm2 3.7+ Session Status (OSC 21337):
  * a subtitle below the tab name, a colored dot, and detail text for the
- * Session Status tool / Cockpit.
+ * Session Status tool / Cockpit, plus native tab progress (OSC 9;4).
  *
  * NOTE: the default export shape `{ id, setup }` is intentional. The V2 TUI
  * loader validates exactly that (a string `id` plus a `setup` function), so
@@ -14,15 +14,12 @@
  */
 
 import { appendFileSync } from "node:fs";
-import {
-  buildClearSequence,
-  buildStatusSequence,
-  wrapTmuxPassthrough,
-} from "./iterm.js";
+import { buildClearSequence, wrapTmuxPassthrough } from "./iterm.js";
 import {
   deriveState,
   resolveOptions,
-  toItermFields,
+  toProgressSequence,
+  toStatusSequence,
   type ResolvedOptions,
   type Snapshot,
 } from "./state.js";
@@ -248,8 +245,28 @@ export default {
     const tabs = ui?.tabs;
     const location = context.location;
 
+    const shouldWrap = (): boolean => {
+      if (options.tmux === "always") return true;
+      if (options.tmux === "never") return false;
+      return tmuxDetected();
+    };
+
+    const emitStatus = (payload: string): void => {
+      const extra = shouldWrap()
+        ? wrapTmuxPassthrough(payload, options.tmuxLevels)
+        : "";
+      writeStdout(payload + extra);
+    };
+
+    const clearStatus = (): void => {
+      emitStatus(
+        buildClearSequence() +
+          (options.progress ? toProgressSequence("idle") : ""),
+      );
+    };
+
     if (!options.enabled) {
-      writeStdout(buildClearSequence());
+      clearStatus();
       return;
     }
     if (!data || !session) {
@@ -268,19 +285,6 @@ export default {
     let lastPayload = "";
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
     let followUpTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const shouldWrap = (): boolean => {
-      if (options.tmux === "always") return true;
-      if (options.tmux === "never") return false;
-      return tmuxDetected();
-    };
-
-    const emitStatus = (payload: string): void => {
-      const extra = shouldWrap()
-        ? wrapTmuxPassthrough(payload, options.tmuxLevels)
-        : "";
-      writeStdout(payload + extra);
-    };
 
     const takeSnapshot = (): Snapshot => {
       const routeID = readRouteSessionID(router);
@@ -335,9 +339,7 @@ export default {
       try {
         const snapshot = takeSnapshot();
         const state = deriveState(snapshot);
-        const payload = buildStatusSequence(
-          toItermFields(state, snapshot, options),
-        );
+        const payload = toStatusSequence(state, snapshot, options);
         if (!force && payload === lastPayload) return;
         lastPayload = payload;
         emitStatus(payload);
@@ -450,7 +452,7 @@ export default {
           // Ignore teardown errors.
         }
       }
-      writeStdout(buildClearSequence());
+      clearStatus();
       log("disposed");
     };
   },

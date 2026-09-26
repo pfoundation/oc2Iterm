@@ -156,6 +156,7 @@ describe("oc-iterm2 plugin", () => {
     try {
       expect(statuses()).toEqual(["idle"]);
       expect(writes[0]).toContain("indicator=#8e8e93");
+      expect(writes[0]).toContain("\x1b]9;4;0\x07");
     } finally {
       cleanup();
     }
@@ -173,6 +174,13 @@ describe("oc-iterm2 plugin", () => {
       expect(statuses()).toEqual(["idle", "working"]);
       expect(writes[1]).toContain("indicator=#ffa500");
       expect(writes[1]).toContain("detail=build · sonnet");
+      expect(writes[1]).toContain("\x1b]9;4;3\x07");
+
+      store.running.clear();
+      ctx.emit("session.execution.succeeded", { sessionID: "ses_main" });
+      await sleep(120);
+      expect(statuses()).toEqual(["idle", "working", "idle"]);
+      expect(writes[2]).toContain("\x1b]9;4;0\x07");
     } finally {
       cleanup();
     }
@@ -196,6 +204,7 @@ describe("oc-iterm2 plugin", () => {
       await sleep(120);
       expect(statuses()).toEqual(["idle", "working"]);
       expect(writes[1]).toContain("detail=2 agents");
+      expect(writes[1]).toContain("\x1b]9;4;3\x07");
     } finally {
       cleanup();
     }
@@ -222,6 +231,7 @@ describe("oc-iterm2 plugin", () => {
       expect(statuses()).toEqual(["idle", "working", "waiting"]);
       expect(writes[2]).toContain("indicator=#ff5f57");
       expect(writes[2]).toContain("detail=permission · edit · app.ts");
+      expect(writes[2]).toContain("\x1b]9;4;4\x07");
 
       delete store.permissions.ses_main;
       ctx.emit("permission.replied", {
@@ -231,6 +241,7 @@ describe("oc-iterm2 plugin", () => {
       });
       await sleep(120);
       expect(statuses()).toEqual(["idle", "working", "waiting", "working"]);
+      expect(writes[3]).toContain("\x1b]9;4;3\x07");
     } finally {
       cleanup();
     }
@@ -251,6 +262,7 @@ describe("oc-iterm2 plugin", () => {
       expect(statuses()).toEqual(["idle", "error"]);
       expect(writes[1]).toContain("indicator=#ff0000");
       expect(writes[1]).toContain("detail=rate limited");
+      expect(writes[1]).toContain("\x1b]9;4;2\x07");
     } finally {
       cleanup();
     }
@@ -294,28 +306,33 @@ describe("oc-iterm2 plugin", () => {
     }
   });
 
-  test("dispose clears the status", async () => {
+  test("dispose clears the status and active progress", async () => {
     captureStdout();
-    const store = createStore();
+    const store = createStore({ running: new Set(["ses_main"]) });
     const ctx = createCtx(store);
     const cleanup = plugin.setup(ctx) as unknown as () => void;
     cleanup();
-    expect(writes[writes.length - 1]).toBe(buildClearSequence());
+    expect(writes[writes.length - 1]).toBe(
+      buildClearSequence() + "\x1b]9;4;0\x07",
+    );
   });
 
   test("tmux wrapping appends a DCS copy when $TMUX is set", async () => {
     captureStdout();
     process.env.TMUX = "/tmp/tmux-test,123,0";
-    const store = createStore();
+    const store = createStore({ running: new Set(["ses_main"]) });
     const ctx = createCtx(store);
     const cleanup = plugin.setup(ctx) as unknown as () => void;
     try {
       expect(writes).toHaveLength(1);
       expect(writes[0]).toContain("\x1bPtmux;");
-      expect(statuses()).toEqual(["idle"]);
+      expect(writes[0]).toContain("\x1b\x1b]9;4;3\x07");
+      expect(statuses()).toEqual(["working"]);
     } finally {
       cleanup();
     }
+    expect(writes.at(-1)).toContain("\x1bPtmux;");
+    expect(writes.at(-1)).toContain("\x1b\x1b]9;4;0\x07");
   });
 
   test("falls back to data.on when data.listen is missing", async () => {
@@ -342,7 +359,48 @@ describe("oc-iterm2 plugin", () => {
     const store = createStore();
     const ctx = createCtx(store, { enabled: false });
     const cleanup = plugin.setup(ctx) as unknown as (() => void) | undefined;
-    expect(writes).toEqual([buildClearSequence()]);
+    expect(writes).toEqual([buildClearSequence() + "\x1b]9;4;0\x07"]);
     expect(cleanup).toBeUndefined();
+  });
+
+  test("disabling progress preserves status and leaves other progress writers alone", () => {
+    captureStdout();
+    const store = createStore({ running: new Set(["ses_main"]) });
+    const cleanup = plugin.setup(createCtx(store, { progress: false }));
+    try {
+      expect(statuses()).toEqual(["working"]);
+      expect(writes.join("")).not.toContain("\x1b]9;4;");
+    } finally {
+      cleanup?.();
+    }
+    expect(writes.at(-1)).toBe(buildClearSequence());
+  });
+
+  test("progress follows state even with customized status text", () => {
+    captureStdout();
+    const store = createStore({ running: new Set(["ses_main"]) });
+    const cleanup = plugin.setup(
+      createCtx(store, { text: { working: "busy" } }),
+    );
+    try {
+      expect(statuses()).toEqual(["busy"]);
+      expect(writes[0]).toContain("\x1b]9;4;3\x07");
+    } finally {
+      cleanup?.();
+    }
+  });
+
+  test("disabled plugin clears progress through configured nested tmux wrapping", () => {
+    captureStdout();
+    plugin.setup(
+      createCtx(createStore(), {
+        enabled: false,
+        tmux: "always",
+        tmuxLevels: 2,
+      }),
+    );
+    expect(writes[0]).toContain("\x1b]9;4;0\x07");
+    expect(writes[0]).toContain("\x1bPtmux;\x1b\x1bPtmux;");
+    expect(writes[0]).toContain("\x1b\x1b\x1b\x1b]9;4;0\x07");
   });
 });

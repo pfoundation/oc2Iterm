@@ -1,4 +1,8 @@
-import { buildStatusSequence, type ItermFields } from "./iterm.js";
+import {
+  buildProgressSequence,
+  buildStatusSequence,
+  type ItermFields,
+} from "./iterm.js";
 
 /** Agent states, ordered from highest to lowest display priority. */
 export type AgentState = "waiting" | "working" | "error" | "idle";
@@ -17,6 +21,8 @@ export type OcIterm2Options = {
   textColor?: string;
   /** Emit `detail` text (permission action, subagent count, error). Default true. */
   detail?: boolean;
+  /** Native tab progress indicator (OSC 9;4). Default true. */
+  progress?: boolean;
   /**
    * tmux DCS-passthrough wrapping for the emitted sequence:
    * - `auto` (default): emit raw, plus a wrapped copy when `$TMUX` is set.
@@ -40,6 +46,7 @@ export type ResolvedOptions = {
   dot: StateColor;
   textColor: string;
   detail: boolean;
+  progress: boolean;
   tmux: "auto" | "always" | "never";
   tmuxLevels: number;
   pollMs: number;
@@ -100,6 +107,7 @@ export function resolveOptions(raw: unknown): ResolvedOptions {
     },
     textColor: typeof options.textColor === "string" ? options.textColor : "",
     detail: options.detail !== false,
+    progress: options.progress !== false,
     tmux,
     tmuxLevels: Math.min(
       3,
@@ -208,5 +216,13 @@ export function toStatusSequence(
   snapshot: Snapshot,
   options: ResolvedOptions,
 ): string {
-  return buildStatusSequence(toItermFields(state, snapshot, options));
+  return (
+    buildStatusSequence(toItermFields(state, snapshot, options)) +
+    (options.progress ? toProgressSequence(state) : "")
+  );
+}
+
+export function toProgressSequence(state: AgentState): string {
+  const progressState = { idle: 0, error: 2, working: 3, waiting: 4 } as const;
+  return buildProgressSequence(progressState[state]);
 }

@@ -1,17 +1,23 @@
 # oc-iterm2
 
-OpenCode CLI plugin that mirrors agent status to **iTerm2 3.7+ Session Status**:
-a subtitle below the tab name, a colored dot, and detail text for the
+OpenCode CLI plugin that mirrors agent status to **iTerm2 3.7+ Session Status**
+and its native tab progress indicator: a subtitle below the tab name,
+a colored dot, animated loading while working, and detail text for the
 [Session Status tool](https://iterm2.com/documentation-session-status.html) and Cockpit.
 
 It reports the same lifecycle Claude Code's integration shows, plus failures:
 
-| State     | Meaning                                              | Dot     |
-| --------- | ---------------------------------------------------- | ------- |
-| `waiting` | permission, form, or question needs your input       | red     |
-| `working` | this session or its subagents are running            | orange  |
-| `error`   | last run failed (sticky until the next run)          | red     |
-| `idle`    | nothing running                                      | gray    |
+| State     | Meaning                                              | Dot     | Progress      |
+| --------- | ---------------------------------------------------- | ------- | ------------- |
+| `waiting` | permission, form, or question needs your input       | red     | paused        |
+| `working` | this session or its subagents are running            | orange  | animated      |
+| `error`   | last run failed (sticky until the next run)          | red     | error         |
+| `idle`    | nothing running                                      | gray    | cleared       |
+
+Progress uses [OSC 9;4](https://iterm2.com/documentation-escape-codes.html),
+separately from the OSC 21337 status text and dot. iTerm2 controls the progress
+colors and animation; no percentage is estimated. Progress is also cleared on
+plugin shutdown. Set `progress: false` to emit only Session Status updates.
 
 ## Requirements
 
@@ -79,6 +85,7 @@ All options are optional; set them in `cli.json` with the object form:
         },
         "textColor": "",
         "detail": true,
+        "progress": true,
         "tmux": "auto",
         "tmuxLevels": 1,
         "pollMs": 2000,
@@ -96,6 +103,7 @@ All options are optional; set them in `cli.json` with the object form:
 | `dot`        | above   | `#rrggbb` dot color per state.                                        |
 | `textColor`  | `""`    | Subtitle text color; empty keeps iTerm2's default.                    |
 | `detail`     | `true`  | Show permission action, subagent count, or error in tool/Cockpit.     |
+| `progress`   | `true`  | Native tab progress: animated working, paused waiting, error, clear idle. |
 | `tmux`       | `auto`  | `auto` adds a DCS-wrapped copy when `$TMUX` is set.                   |
 | `tmuxLevels` | `1`     | Wrap depth for nested tmux sessions.                                  |
 | `pollMs`     | `2000`  | Recompute cadence (session switches, drift). Min 250.                 |
@@ -107,7 +115,8 @@ passing options (useful when `cli.json` only lists the plugin by path).
 
 ## Plain tmux (non-`-CC`)
 
-The plugin emits the raw `OSC 21337` sequence plus, when `$TMUX` is set, a
+The plugin emits raw `OSC 21337` status and `OSC 9;4` progress sequences plus,
+when `$TMUX` is set, a
 DCS-wrapped copy (`ESC Ptmux; … ESC \`) that tmux forwards to iTerm2. Enable
 forwarding in `~/.tmux.conf`:
 
@@ -130,11 +139,13 @@ set -g allow-passthrough on
 
 ## Manual probe
 
-Emit one status update from your real terminal setup to verify rendering:
+Emit status and progress updates from your real terminal setup to verify rendering:
 
 ```sh
 bun scripts/probe.ts working "2 agents"
 bun scripts/probe.ts waiting "permission · edit"
+bun scripts/probe.ts error "rate limited"
+bun scripts/probe.ts idle
 bun scripts/probe.ts clear
 ```
 
@@ -147,6 +158,6 @@ bunx tsc --noEmit
 ```
 
 Layout: `tui.ts` (discovery entrypoint, re-exports `src/tui.ts`),
-`src/iterm.ts` (OSC 21337 encoding), `src/state.ts` (options and state
+`src/iterm.ts` (OSC 21337 and OSC 9;4 encoding), `src/state.ts` (options and state
 derivation), `src/tui.ts` (plugin entry, `{ id, setup }` per the V2 TUI
 loader contract).

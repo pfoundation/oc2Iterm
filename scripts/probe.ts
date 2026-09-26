@@ -1,8 +1,8 @@
 /**
- * Manual probe: emit one iTerm2 Session Status sequence to this terminal.
+ * Manual probe: emit iTerm2 Session Status and progress to this terminal.
  *
  * Run inside iTerm2 (ideally through your real tmux setup) to verify the tab
- * subtitle and dot update:
+ * subtitle, dot, and progress update:
  *
  *   bun scripts/probe.ts working "2 agents"
  *   bun scripts/probe.ts waiting "permission · edit"
@@ -15,12 +15,21 @@ import {
   buildStatusSequence,
   wrapTmuxPassthrough,
 } from "../src/iterm.js";
-import { DEFAULT_DOT, type AgentState } from "../src/state.js";
+import {
+  DEFAULT_DOT,
+  toProgressSequence,
+  type AgentState,
+} from "../src/state.js";
 
 const [stateArg, detailArg] = process.argv.slice(2);
 
+function emit(payload: string): void {
+  const extra = process.env.TMUX ? wrapTmuxPassthrough(payload) : "";
+  process.stdout.write(payload + extra);
+}
+
 if (stateArg === "clear") {
-  process.stdout.write(buildClearSequence());
+  emit(buildClearSequence() + toProgressSequence("idle"));
   process.exit(0);
 }
 
@@ -38,13 +47,13 @@ if (!state) {
   process.exit(1);
 }
 
-const payload = buildStatusSequence({
-  status: state,
-  indicator: DEFAULT_DOT[state],
-  detail: detailArg ?? "",
-});
-const extra = process.env.TMUX ? wrapTmuxPassthrough(payload) : "";
-process.stdout.write(payload + extra);
+const payload =
+  buildStatusSequence({
+    status: state,
+    indicator: DEFAULT_DOT[state],
+    detail: detailArg ?? "",
+  }) + toProgressSequence(state);
+emit(payload);
 console.error(
   `emitted state=${state} tmux=${process.env.TMUX ? "wrapped+raw" : "raw"}`,
 );
