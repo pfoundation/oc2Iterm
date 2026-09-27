@@ -6,6 +6,9 @@ const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 type SessionRecord = {
+  title?: string;
+  projectID?: string;
+  location?: { directory: string };
   outcome?: string;
   agent?: string;
   model?: { id: string };
@@ -36,7 +39,11 @@ function createStore(overrides: Partial<Store> = {}): Store {
 type Ctx = {
   options: Record<string, unknown>;
   theme?: unknown;
+  location?: { directory: string };
   data: {
+    project?: {
+      get: (id: string) => { name?: string; canonical?: string } | undefined;
+    };
     listen?: (handler: (event: unknown) => void) => () => void;
     on?: (type: string, handler: (event: unknown) => void) => () => void;
     session: {
@@ -149,6 +156,90 @@ afterEach(() => {
 });
 
 describe("oc-iterm2 plugin", () => {
+  test("tab title follows the session folder rather than project metadata", async () => {
+    captureStdout();
+    const store = createStore({
+      sessions: {
+        ses_main: {
+          title: "Fix login",
+          projectID: "prj_main",
+          location: { directory: "/repo/worktree" },
+        },
+        ses_other: {
+          title: "Add tests",
+          location: { directory: "/repo/other/" },
+        },
+      },
+    });
+    const ctx = createCtx(store);
+    ctx.data.project = {
+      get: () => ({ name: "my-project", canonical: "/repo/main" }),
+    };
+    const cleanup = plugin.setup(ctx);
+    try {
+      expect(writes.join("")).toContain(
+        "\x1b[22;0t\x1b]0;Fix login · worktree\x07",
+      );
+      store.sessions.ses_main!.title = "Fix authentication";
+      ctx.emit("session.updated", { sessionID: "ses_main" });
+      await sleep(120);
+      expect(writes.join("")).toContain(
+        "\x1b]0;Fix authentication · worktree\x07",
+      );
+
+      store.routeSessionID = "ses_other";
+      ctx.emit("tui.session.select", { sessionID: "ses_other" });
+      await sleep(120);
+      expect(writes.join("")).toContain("\x1b]0;Add tests · other\x07");
+      expect(writes.join("").split("\x1b[22;0t")).toHaveLength(2);
+    } finally {
+      cleanup?.();
+    }
+    expect(writes.join("")).toContain("\x1b[23;0t");
+  });
+
+  test("home title uses the live location instead of the previous session", async () => {
+    captureStdout();
+    const store = createStore({
+      sessions: {
+        ses_main: { title: "Work", location: { directory: "/repo/old" } },
+      },
+    });
+    const ctx = createCtx(store);
+    const cleanup = plugin.setup(ctx);
+    try {
+      expect(writes.join("")).toContain("\x1b]0;Work · old\x07");
+      delete store.routeSessionID;
+      ctx.location = { directory: "/repo/new" };
+      const deadline = Date.now() + 2000;
+      while (
+        !writes.join("").includes("\x1b]0;OpenCode · new\x07") &&
+        Date.now() < deadline
+      )
+        await sleep(10);
+      expect(writes.join("")).toContain("\x1b]0;OpenCode · new\x07");
+    } finally {
+      cleanup?.();
+    }
+  });
+
+  test("title option can leave title ownership with the terminal", () => {
+    captureStdout();
+    const ctx = createCtx(
+      createStore({
+        sessions: {
+          ses_main: { title: "Work", location: { directory: "/repo/project" } },
+        },
+      }),
+      { title: false },
+    );
+    const cleanup = plugin.setup(ctx);
+    cleanup?.();
+    expect(writes.join("")).not.toContain("\x1b]0;");
+    expect(writes.join("")).not.toContain("\x1b[22;0t");
+    expect(writes.join("")).not.toContain("\x1b[23;0t");
+  });
+
   test("setup emits idle for the current session", async () => {
     captureStdout();
     const store = createStore();

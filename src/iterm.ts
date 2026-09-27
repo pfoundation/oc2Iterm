@@ -14,6 +14,19 @@ export const OSC_21337 = `${ESC}]21337;`;
 /** DCS introducer used to wrap a sequence for tmux passthrough. */
 export const DCS_TMUX_PREFIX = `${ESC}Ptmux;`;
 export const ST_STRING = `${ESC}\\`;
+/** Save/restore both titles because OSC 0 updates both, including tmux's pane title. */
+export const SAVE_TITLE = `${ESC}[22;0t`;
+export const RESTORE_TITLE = `${ESC}[23;0t`;
+
+/** OSC 0 sets iTerm2's session name and tmux's pane title; tmux ignores OSC 1. */
+export function buildTitleSequence(title: string): string {
+  const safe = title
+    .replace(/[\x00-\x1f\x7f-\x9f]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 256);
+  return `${ESC}]0;${safe}${BEL}`;
+}
 
 export type ItermFields = {
   /** Subtitle text shown below the tab name. */

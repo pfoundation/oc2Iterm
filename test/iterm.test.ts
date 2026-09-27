@@ -2,12 +2,21 @@ import { describe, expect, test } from "bun:test";
 import {
   buildClearSequence,
   buildStatusSequence,
+  buildTitleSequence,
   sanitizeField,
   wrapTmuxPassthrough,
 } from "../src/iterm.js";
 
 const ESC = "\x1b";
 const BEL = "\x07";
+
+describe("buildTitleSequence", () => {
+  test("sets icon and window titles for tmux and strips injected terminal controls", () => {
+    expect(buildTitleSequence("Fix\x07\x1b]2;bad\n · project")).toBe(
+      `${ESC}]0;Fix ]2;bad · project${BEL}`,
+    );
+  });
+});
 
 describe("buildStatusSequence", () => {
   test("emits the documented OSC 21337 payload", () => {

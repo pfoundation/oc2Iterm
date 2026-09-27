@@ -13,6 +13,8 @@ export type StateColor = Record<AgentState, string>;
 export type OcIterm2Options = {
   /** Master switch. When false the plugin clears any status and does nothing. */
   enabled?: boolean;
+  /** Show `session title · folder` as the terminal title. Default true. */
+  title?: boolean;
   /** Subtitle text per state. Lowercase matches iTerm2's default priority keywords. */
   text?: Partial<StateText>;
   /** Tab dot overrides (`#rrggbb`). Working defaults to the live theme accent. */
@@ -42,6 +44,7 @@ export type OcIterm2Options = {
 
 export type ResolvedOptions = {
   enabled: boolean;
+  title: boolean;
   text: StateText;
   dot: StateColor;
   textColor: string;
@@ -93,6 +96,7 @@ export function resolveOptions(raw: unknown): ResolvedOptions {
       : "auto";
   return {
     enabled: options.enabled !== false,
+    title: options.title !== false,
     text: {
       waiting: pickString(text.waiting, DEFAULT_TEXT.waiting),
       working: pickString(text.working, DEFAULT_TEXT.working),

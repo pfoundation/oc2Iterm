@@ -5,6 +5,19 @@ and its native tab progress indicator: a subtitle below the tab name,
 a colored dot, animated loading while working, and detail text for the
 [Session Status tool](https://iterm2.com/documentation-session-status.html) and Cockpit.
 
+The main tab title shows **Session title · folder**, for example
+**Fix login bug · oc-iterm2**. The suffix is the active session's directory name,
+falling back to OpenCode's current location. It follows the active session and
+title changes; the home screen shows **OpenCode · folder**. The previous titles
+are saved and restored when the plugin stops.
+
+This uses OSC 0, which updates both iTerm2's session name and tmux's pane title
+(including `tmux -CC`; tmux ignores OSC 1). Select **Session Name** under
+**Settings > Profiles > General > Title** to display it, and remove any manual
+tab-title override. Set the plugin's `title: false` option to disable this.
+Set `"terminal": { "title": false }` in OpenCode's `cli.json` so its built-in
+title writer does not overwrite the plugin's title.
+
 It reports the same lifecycle Claude Code's integration shows, plus failures:
 
 | State     | Meaning                                              | Dot     | Progress      |
@@ -81,6 +94,7 @@ All options are optional; set them in `cli.json` with the object form:
     {
       "package": "./plugins/oc-iterm2",
       "options": {
+        "title": true,
         "text": { "working": "working", "waiting": "waiting", "idle": "idle", "error": "error" },
         "dot": {
           "waiting": "#ff5f57",
@@ -104,6 +118,7 @@ All options are optional; set them in `cli.json` with the object form:
 | Option       | Default | Notes                                                                 |
 | ------------ | ------- | --------------------------------------------------------------------- |
 | `text`       | above   | Subtitle per state. Lowercase matches iTerm2's default priority sort. |
+| `title`      | `true`  | Set the main tab title to `Session title · folder` using OSC 0.      |
 | `dot`        | above   | `#rrggbb` overrides per state; working follows the theme by default.  |
 | `textColor`  | `""`    | Subtitle text color; empty keeps iTerm2's default.                    |
 | `detail`     | `true`  | Show permission action, subagent count, or error in tool/Cockpit.     |

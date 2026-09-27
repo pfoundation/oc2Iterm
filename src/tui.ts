@@ -16,7 +16,10 @@
 import { appendFileSync } from "node:fs";
 import {
   buildClearSequence,
+  buildTitleSequence,
   isHexColor,
+  RESTORE_TITLE,
+  SAVE_TITLE,
   wrapTmuxPassthrough,
 } from "./iterm.js";
 import {
@@ -47,6 +50,7 @@ const RELEVANT_TYPES: ReadonlySet<string> = new Set([
   "session.compaction.ended",
   "session.compaction.failed",
   "session.created",
+  "session.updated",
   "session.deleted",
   "permission.asked",
   "permission.replied",
@@ -261,6 +265,7 @@ export type SetupContext = {
     listen?: (handler: (event: unknown) => void) => unknown;
     on?: (type: string, handler: (event: unknown) => void) => unknown;
     session?: SessionApi;
+    location?: unknown;
   };
   ui?: {
     router?: unknown;
@@ -290,6 +295,41 @@ export default {
     const router = ui?.router;
     const tabs = ui?.tabs;
     const location = context.location;
+
+    const readTabTitle = (): string | undefined => {
+      const route = call<unknown>(
+        isRecord(router) ? router.current : undefined,
+      );
+      if (isRecord(route) && route.type !== "session" && route.type !== "home")
+        return;
+      const id =
+        isRecord(route) && route.type === "session"
+          ? asString(route.sessionID)
+          : undefined;
+      const info = id ? call<unknown>(session?.get, id) : undefined;
+      const record = isRecord(info) ? info : undefined;
+      const locationApi = isRecord(data?.location) ? data.location : undefined;
+      const sessionLocation = isRecord(record?.location)
+        ? record.location
+        : undefined;
+      const currentLocation =
+        context.location ?? call<unknown>(locationApi?.default);
+      const directory =
+        asString(sessionLocation?.directory) ??
+        (isRecord(currentLocation)
+          ? asString(currentLocation.directory)
+          : undefined);
+      const name = directory
+        ?.replace(/\\/g, "/")
+        .replace(/\/+$/, "")
+        .split("/")
+        .pop();
+      const title = asString(record?.title);
+      if (!title && !name) return;
+      return name
+        ? `${(title ?? "OpenCode").slice(0, 160)} · ${name.slice(0, 64)}`
+        : title?.slice(0, 160);
+    };
 
     const shouldWrap = (): boolean => {
       if (options.tmux === "always") return true;
@@ -329,6 +369,8 @@ export default {
     const pendingQuestions = new Set<string>();
     const lastErrors = new Map<string, string>();
     let lastPayload = "";
+    let lastTitle: string | undefined;
+    let titleSaved = false;
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
     let followUpTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -383,6 +425,21 @@ export default {
 
     const recompute = (force: boolean): void => {
       try {
+        if (options.title) {
+          const title = readTabTitle();
+          if (title !== undefined) {
+            const payload = buildTitleSequence(title);
+            if (force || payload !== lastTitle) {
+              emitStatus((titleSaved ? "" : SAVE_TITLE) + payload);
+              titleSaved = true;
+              lastTitle = payload;
+            }
+          } else if (titleSaved) {
+            emitStatus(RESTORE_TITLE);
+            titleSaved = false;
+            lastTitle = undefined;
+          }
+        }
         const snapshot = takeSnapshot();
         const state = deriveState(snapshot);
         options.dot.working = workingOverride ?? readWorkingColor(context);
@@ -500,6 +557,7 @@ export default {
         }
       }
       clearStatus();
+      if (titleSaved) emitStatus(RESTORE_TITLE);
       log("disposed");
     };
   },
