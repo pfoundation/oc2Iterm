@@ -14,8 +14,13 @@
  */
 
 import { appendFileSync } from "node:fs";
-import { buildClearSequence, wrapTmuxPassthrough } from "./iterm.js";
 import {
+  buildClearSequence,
+  isHexColor,
+  wrapTmuxPassthrough,
+} from "./iterm.js";
+import {
+  DEFAULT_DOT,
   deriveState,
   resolveOptions,
   toProgressSequence,
@@ -60,6 +65,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/** V2 exposes resolved accent hues as OpenTUI RGBA colors (0–1 channels). */
+function readWorkingColor(context: Record<string, unknown>): string {
+  try {
+    const theme = context.theme;
+    const hue = isRecord(theme) ? theme.hue : undefined;
+    const accent = isRecord(hue) ? hue.accent : undefined;
+    const color = isRecord(accent) ? accent[500] : undefined;
+    if (typeof color === "string" && isHexColor(color)) return color;
+    if (isRecord(color)) {
+      const channels = [color.r, color.g, color.b];
+      if (
+        channels.every(
+          (value): value is number =>
+            typeof value === "number" &&
+            Number.isFinite(value) &&
+            value >= 0 &&
+            value <= 1,
+        )
+      ) {
+        return (
+          "#" +
+          channels
+            .map((value) =>
+              Math.round(value * 255)
+                .toString(16)
+                .padStart(2, "0"),
+            )
+            .join("")
+        );
+      }
+    }
+  } catch {
+    // Theme access must not prevent status updates on older beta releases.
+  }
+  return DEFAULT_DOT.working;
 }
 
 function asStringArray(value: unknown): string[] {
@@ -213,6 +255,7 @@ function readFormList(
 
 export type SetupContext = {
   options?: unknown;
+  theme?: unknown;
   location?: unknown;
   data?: {
     listen?: (handler: (event: unknown) => void) => unknown;
@@ -232,6 +275,9 @@ export default {
       ? (ctx as Record<string, unknown>)
       : {};
     const options: ResolvedOptions = resolveOptions(context.options);
+    const rawOptions = isRecord(context.options) ? context.options : {};
+    const dot = isRecord(rawOptions.dot) ? rawOptions.dot : {};
+    const workingOverride = asString(dot.working);
     if (debugEnvEnabled()) options.debug = true;
     const log = (line: string): void => debugLog(options.debug, line);
 
@@ -339,6 +385,7 @@ export default {
       try {
         const snapshot = takeSnapshot();
         const state = deriveState(snapshot);
+        options.dot.working = workingOverride ?? readWorkingColor(context);
         const payload = toStatusSequence(state, snapshot, options);
         if (!force && payload === lastPayload) return;
         lastPayload = payload;

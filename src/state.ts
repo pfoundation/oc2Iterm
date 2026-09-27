@@ -15,7 +15,7 @@ export type OcIterm2Options = {
   enabled?: boolean;
   /** Subtitle text per state. Lowercase matches iTerm2's default priority keywords. */
   text?: Partial<StateText>;
-  /** Tab dot color per state (`#rrggbb`). */
+  /** Tab dot overrides (`#rrggbb`). Working defaults to the live theme accent. */
   dot?: Partial<StateColor>;
   /** Subtitle text color (`#rrggbb`). Empty keeps iTerm2's default. */
   textColor?: string;
@@ -63,9 +63,9 @@ export const DEFAULT_TEXT: StateText = {
 
 export const DEFAULT_DOT: StateColor = {
   waiting: "#ff5f57",
-  working: "#ffa500",
+  working: "#ec5b2b",
   error: "#ff0000",
-  idle: "#8e8e93",
+  idle: "#00ff00",
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -204,7 +204,10 @@ export function toItermFields(
   options: ResolvedOptions,
 ): ItermFields {
   return {
-    status: options.text[state],
+    status:
+      state === "working" && snapshot.runningIDs.length > 1
+        ? `${options.text[state]} · ${snapshot.runningIDs.length} agents`
+        : options.text[state],
     indicator: options.dot[state],
     statusColor: options.textColor,
     detail: options.detail ? deriveDetail(state, snapshot) : "",

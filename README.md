@@ -10,9 +10,14 @@ It reports the same lifecycle Claude Code's integration shows, plus failures:
 | State     | Meaning                                              | Dot     | Progress      |
 | --------- | ---------------------------------------------------- | ------- | ------------- |
 | `waiting` | permission, form, or question needs your input       | red     | paused        |
-| `working` | this session or its subagents are running            | orange  | animated      |
+| `working` | this session or its subagents are running            | theme accent (fallback `#ec5b2b`) | animated |
 | `error`   | last run failed (sticky until the next run)          | red     | error         |
-| `idle`    | nothing running                                      | gray    | cleared       |
+| `idle`    | nothing running                                      | green (`#00ff00`) | cleared |
+
+When multiple agents are running, the tab subtitle includes the count, for
+example **working · 3 agents**. This counts the main session (when running) and
+its running subagents. The count also appears in Session Status/Cockpit detail;
+the subtitle returns to **working** when only one agent remains active.
 
 Progress uses [OSC 9;4](https://iterm2.com/documentation-escape-codes.html),
 separately from the OSC 21337 status text and dot. iTerm2 controls the progress
@@ -78,9 +83,8 @@ All options are optional; set them in `cli.json` with the object form:
       "options": {
         "text": { "working": "working", "waiting": "waiting", "idle": "idle", "error": "error" },
         "dot": {
-          "working": "#ffa500",
           "waiting": "#ff5f57",
-          "idle": "#8e8e93",
+          "idle": "#00ff00",
           "error": "#ff0000"
         },
         "textColor": "",
@@ -100,7 +104,7 @@ All options are optional; set them in `cli.json` with the object form:
 | Option       | Default | Notes                                                                 |
 | ------------ | ------- | --------------------------------------------------------------------- |
 | `text`       | above   | Subtitle per state. Lowercase matches iTerm2's default priority sort. |
-| `dot`        | above   | `#rrggbb` dot color per state.                                        |
+| `dot`        | above   | `#rrggbb` overrides per state; working follows the theme by default.  |
 | `textColor`  | `""`    | Subtitle text color; empty keeps iTerm2's default.                    |
 | `detail`     | `true`  | Show permission action, subagent count, or error in tool/Cockpit.     |
 | `progress`   | `true`  | Native tab progress: animated working, paused waiting, error, clear idle. |
@@ -109,6 +113,11 @@ All options are optional; set them in `cli.json` with the object form:
 | `pollMs`     | `2000`  | Recompute cadence (session switches, drift). Min 250.                 |
 | `forceMs`    | `30000` | Force re-emit cadence (recovers after tmux reattach). Min 1000.       |
 | `debug`      | `false` | Append to `/tmp/opencode/oc-iterm2.log`.                              |
+
+The working dot uses OpenCode's resolved `theme.hue.accent[500]` color and
+refreshes on the next status update or poll (by default within 2 seconds of a
+theme change). If that color is unavailable, it uses `#ec5b2b`. Set
+`dot.working` to a hex color to override the theme.
 
 `OC_ITERM2_DEBUG=1` in the TUI's environment enables debug logging without
 passing options (useful when `cli.json` only lists the plugin by path).

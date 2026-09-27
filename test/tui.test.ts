@@ -35,6 +35,7 @@ function createStore(overrides: Partial<Store> = {}): Store {
 
 type Ctx = {
   options: Record<string, unknown>;
+  theme?: unknown;
   data: {
     listen?: (handler: (event: unknown) => void) => () => void;
     on?: (type: string, handler: (event: unknown) => void) => () => void;
@@ -155,7 +156,7 @@ describe("oc-iterm2 plugin", () => {
     const cleanup = plugin.setup(ctx) as unknown as () => void;
     try {
       expect(statuses()).toEqual(["idle"]);
-      expect(writes[0]).toContain("indicator=#8e8e93");
+      expect(writes[0]).toContain("indicator=#00ff00");
       expect(writes[0]).toContain("\x1b]9;4;0\x07");
     } finally {
       cleanup();
@@ -172,7 +173,7 @@ describe("oc-iterm2 plugin", () => {
       ctx.emit("session.execution.started", { sessionID: "ses_main" });
       await sleep(120);
       expect(statuses()).toEqual(["idle", "working"]);
-      expect(writes[1]).toContain("indicator=#ffa500");
+      expect(writes[1]).toContain("indicator=#ec5b2b");
       expect(writes[1]).toContain("detail=build · sonnet");
       expect(writes[1]).toContain("\x1b]9;4;3\x07");
 
@@ -183,6 +184,57 @@ describe("oc-iterm2 plugin", () => {
       expect(writes[2]).toContain("\x1b]9;4;0\x07");
     } finally {
       cleanup();
+    }
+  });
+
+  test("working dot follows the live theme without a session event", async () => {
+    captureStdout();
+    const ctx = createCtx(createStore({ running: new Set(["ses_main"]) }));
+    let theme: unknown = {
+      hue: { accent: { 500: { r: 0, g: 128 / 255, b: 1, a: 1 } } },
+    };
+    Object.defineProperty(ctx, "theme", { get: () => theme });
+    const cleanup = plugin.setup(ctx);
+    try {
+      expect(writes[0]).toContain("indicator=#0080ff;");
+      theme = { hue: { accent: { 500: "#aabbcc" } } };
+      const deadline = Date.now() + 2000;
+      while (writes.length < 2 && Date.now() < deadline) await sleep(10);
+      expect(writes[1]).toContain("indicator=#aabbcc;");
+    } finally {
+      cleanup?.();
+    }
+  });
+
+  test("explicit working dot overrides the theme", () => {
+    captureStdout();
+    const ctx = createCtx(createStore({ running: new Set(["ses_main"]) }), {
+      dot: { working: "#123456" },
+    });
+    ctx.theme = { hue: { accent: { 500: "#abcdef" } } };
+    const cleanup = plugin.setup(ctx);
+    try {
+      expect(writes[0]).toContain("indicator=#123456;");
+    } finally {
+      cleanup?.();
+    }
+  });
+
+  test.each([
+    undefined,
+    {},
+    { hue: { accent: { 500: "invalid" } } },
+    { hue: { accent: { 500: { r: NaN, g: 0, b: 1 } } } },
+    { hue: { accent: { 500: { r: 256, g: 0, b: 1 } } } },
+  ])("unavailable theme color falls back to orange: %j", (theme) => {
+    captureStdout();
+    const ctx = createCtx(createStore({ running: new Set(["ses_main"]) }));
+    ctx.theme = theme;
+    const cleanup = plugin.setup(ctx);
+    try {
+      expect(writes[0]).toContain("indicator=#ec5b2b;");
+    } finally {
+      cleanup?.();
     }
   });
 
@@ -202,9 +254,16 @@ describe("oc-iterm2 plugin", () => {
         status: { type: "busy" },
       });
       await sleep(120);
-      expect(statuses()).toEqual(["idle", "working"]);
+      expect(statuses()).toEqual(["idle", "working · 2 agents"]);
       expect(writes[1]).toContain("detail=2 agents");
       expect(writes[1]).toContain("\x1b]9;4;3\x07");
+
+      store.running.delete("ses_sub");
+      ctx.emit("session.execution.succeeded", { sessionID: "ses_sub" });
+      await sleep(120);
+      expect(statuses()).toEqual(["idle", "working · 2 agents", "working"]);
+      expect(writes[2]).not.toContain("detail=2 agents");
+      expect(writes[2]).toContain("\x1b]9;4;3\x07");
     } finally {
       cleanup();
     }

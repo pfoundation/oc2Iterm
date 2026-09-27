@@ -173,11 +173,25 @@ describe("toItermFields", () => {
     expect(
       toItermFields("working", snapshot({ runningIDs: ["a", "b"] }), options),
     ).toEqual({
-      status: "working",
-      indicator: "#ffa500",
+      status: "working · 2 agents",
+      indicator: "#ec5b2b",
       statusColor: "",
       detail: "2 agents",
     });
+  });
+
+  test("agent count augments custom working text even when detail is disabled", () => {
+    const options = resolveOptions({
+      text: { working: "busy" },
+      detail: false,
+    });
+    const fields = toItermFields(
+      "working",
+      snapshot({ runningIDs: ["ses_test", "ses_sub"] }),
+      options,
+    );
+    expect(fields.status).toBe("busy · 2 agents");
+    expect(fields.detail).toBe("");
   });
 
   test("detail can be disabled", () => {
